@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Visualizer AI — Beat-Driven 1080p+ Visuals</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header>
+      <div class="logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="14" stroke="#a78bfa" stroke-width="2"/>
+          <path d="M8 20 L12 12 L16 18 L20 8 L24 20" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Audio Viz <span class="accent">AI</span></span>
+      </div>
+      <div class="tagline">AI-driven visuals synced to every beat drop &amp; tempo shift</div>
+    </header>
+
+    <!-- Main input card -->
+    <main class="input-card">
+      <div class="card-title">Create Music Visuals</div>
+
+      <form id="vizForm" class="form-grid">
+        <!-- URL -->
+        <div class="field">
+          <label for="url">Audio Link</label>
+          <div class="url-wrapper">
+            <select id="sourceSelect" class="source-select">
+              <option value="youtube">YouTube</option>
+              <option value="soundcloud">SoundCloud</option>
+              <option value="spotify">Spotify (metadata only)</option>
+            </select>
+            <input
+              type="url"
+              id="url"
+              name="url"
+              placeholder="https://youtube.com/watch?v=..."
+              required
+              autocomplete="url"
+            />
+          </div>
+          <p class="field-hint">YouTube &amp; SoundCloud: full audio download &amp; visual analysis. Spotify: theme metadata only.</p>
+        </div>
+
+        <!-- Theme -->
+        <div class="field theme-field">
+          <label for="theme">Visual Theme</label>
+          <div class="theme-input-row">
+            <input
+              type="text"
+              id="theme"
+              name="theme"
+              placeholder="e.g. cosmic space, neon cyberpunk, ocean deep..."
+              value="cosmic-space"
+              list="themeSuggestions"
+            />
+            <datalist id="themeSuggestions">
+              <option value="cosmic-space">
+              <option value="neon-cyberpunk">
+              <option value="ocean-deep">
+              <option value="firestorm">
+              <option value="geometric-minimal">
+              <option value="vaporwave">
+              <option value="nature-forest">
+              <option value="dark-gothic">
+              <option value="retro-80s">
+              <option value="abstract-particles">
+              <option value="anime-style">
+              <option value="photo-realistic">
+            </datalist>
+            <button type="button" id="themePaletteBtn" class="palette-btn" title="Browse theme presets">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="5" cy="6" r="1.5" fill="currentColor"/>
+                <circle cx="10" cy="5" r="1.5" fill="currentColor"/>
+                <circle cx="7" cy="11" r="1.5" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <p class="field-hint">Type any mood, color, or style — the AI interprets it into a visual palette.</p>
+        </div>
+
+        <!-- Resolution + FPS -->
+        <div class="field">
+          <label for="resolution">Resolution</label>
+          <select id="resolution" name="resolution">
+            <option value="1080p">1080p (1920×1080)</option>
+            <option value="1440p">1440p (2560×1440)</option>
+            <option value="4K">4K (3840×2160)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="fps">Frame Rate</label>
+          <select id="fps" name="fps">
+            <option value="30">30 fps</option>
+            <option value="60" selected>60 fps (smooth)</option>
+          </select>
+        </div>
+
+        <!-- Submit -->
+        <div class="submit-row">
+          <button type="submit" id="submitBtn" class="btn-primary">
+            <span class="btn-icon">✦</span>
+            <span class="btn-text">Generate Visuals</span>
+          </button>
+        </div>
+      </form>
+    </main>
+
+    <!-- Theme palette picker modal -->
+    <div id="themeModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Choose a Theme</h3>
+          <button class="modal-close" id="modalClose">&times;</button>
+        </div>
+        <div class="theme-grid" id="themeGrid"></div>
+      </div>
+    </div>
+
+    <!-- Status / progress -->
+    <section id="statusSection" class="status-section hidden">
+      <div class="status-card">
+        <div class="status-header">
+          <div class="status-id" id="statusId"></div>
+          <div class="status-badge" id="statusBadge">queued</div>
+        </div>
+        <div class="status-message" id="statusMessage">Waiting...</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-label">
+          <span id="progressPercent">0%</span>
+          <span id="progressSub"></span>
+        </div>
+        <!-- AI Keyframe prompts panel -->
+        <div id="aiPromptSection" class="ai-prompt-section" style="display:none;">
+          <div class="ai-prompt-section-header">
+            <span class="ai-prompt-label"><span class="ai-icon">🤖</span> AI Keyframes</span>
+            <span class="ai-prompt-count" id="aiPromptCount"></span>
+          </div>
+          <div class="ai-prompt-list" id="aiPromptList"></div>
+          <div class="ai-prompt-hint">
+            AI-generated images are composited at each beat drop — full-frame visuals
+            that flash in, hold, then crossfade back to the procedural animation.
+          </div>
+        </div>
+        <div class="status-actions" id="statusActions" style="display:none;">
+          <a id="downloadBtn" href="#" class="btn-secondary" download>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v10M4 8l4 4 4-4M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Download Video
+          </a>
+          <button id="newBtn" class="btn-secondary">New Visual</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feature showcase -->
+    <section class="features">
+      <div class="features-grid">
+        <div class="feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2L15 9L22 9L16 14L18 21L12 17L6 21L8 14L2 9L9 9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </div>
+          <h3>Beat Detection</h3>
+          <p>AI detects every kick, snare, and drop — visuals pulse, burst, and explode on the beat.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 12h2l2-5 3 9 3-9 2 5h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3>Tempo Awareness</h3>
+          <p>Tempo changes trigger visual transitions — faster sections ramp up energy, slow sections breathe.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <h3>Spectral Bands</h3>
+          <p>Bass, mids, and highs each drive different visual layers — deep bass makes particles surge.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/></svg>
+          </div>
+          <h3>1080p &amp; UP</h3>
+          <p>Render at 1080p, 1440p, or 4K at 60fps — ready for screens big and small.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3c-4 0-7 3-7 7s3 7 7 7 7-3 7-7-3-7-7-7z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <h3>Theme Prompts</h3>
+          <p>Type any theme — "cosmic space", "neon cyberpunk", "ocean deep" — and the AI builds a matching visual universe.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 8h2v8H6zM10 8h6v4h-6zM18 8h2v8h-2z" stroke="currentColor" stroke-width="1.5"/></svg>
+          </div>
+          <h3>YouTube · SoundCloud</h3>
+          <p>Paste any public YouTube or SoundCloud link — audio is downloaded, analyzed, and turned into visuals.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>Audio Visualizer AI &mdash; built with librosa, OpenCV &amp; FFmpeg.</p>
+      <p class="footer-note">Spotify links extract metadata only — audio analysis requires YouTube or SoundCloud.</p>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

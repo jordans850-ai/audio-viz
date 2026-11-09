@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.png
+*.jpg
+*.mp4
+uploads/
+outputs/
+.env
+.env.local
+.DS_Store
+frontend/

@@ -27,86 +27,130 @@ from pydantic import BaseModel
 import yt_dlp
 import jinja2
 
-# ─── Token-based authenticator ──────────────────────────────────────────────
-# One secret token. Share the URL with ?token=XXX with your friend.
-# Set via env var VIZ_TOKEN, or a random one is generated on first start.
-TOKEN = os.environ.get("VIZ_TOKEN")
-if not TOKEN:
-    TOKEN = secrets.token_urlsafe(16)
-    print(f"\n🔑  Your access token: {TOKEN}")
-    print(f"   Use: https://your-host:port/?token={TOKEN}\n")
+# ─── Username + Password authenticator ─────────────────────────────────────
+# Set via env vars AUTH_USERNAME and AUTH_PASSWORD, or use these defaults.
+# CHANGE THE DEFAULTS BELOW to something only you and your friend know.
+AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "viz")
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "chang3th1s!23")  # ← CHANGE THIS
 
-_valid_tokens: set[str] = {TOKEN}
+# Simple in-memory session store (use Redis in production)
+_active_sessions: set[str] = set()
 
 
-def check_token(request: Request) -> bool:
-    """Return True if request has a valid token (query param or cookie)."""
-    token_param = request.query_params.get("token", "")
-    if token_param and token_param in _valid_tokens:
+def check_auth(request: Request) -> bool:
+    """Return True if request has a valid session cookie or Basic Auth."""
+    # Check session cookie
+    session_id = request.cookies.get("viz_sid")
+    if session_id and session_id in _active_sessions:
         return True
-    cookie_token = request.cookies.get("viz_token")
-    if cookie_token and cookie_token in _valid_tokens:
-        return True
+    # Fallback: HTTP Basic Auth (for curl / direct access)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "):
+        import base64
+        try:
+            decoded = base64.b64decode(auth_header.split(" ", 1)[1]).decode("utf-8")
+            user, pwd = decoded.split(":", 1)
+            return user == AUTH_USERNAME and pwd == AUTH_PASSWORD
+        except Exception:
+            pass
     return False
 
 
-async def token_auth(request: Request, call_next):
-    """Middleware: require valid token for non-whitelisted routes."""
-    # Whitelist: health, static files, token info endpoint
+async def auth_middleware(request: Request, call_next):
+    """Middleware: require login for non-whitelisted routes."""
+    # Whitelist: health check, static files
     if (request.url.path.startswith("/api/health")
-            or request.url.path.startswith("/static")
-            or request.url.path == "/api/token"):
+            or request.url.path.startswith("/static")):
         return await call_next(request)
 
-    if check_token(request):
-        response = await call_next(request)
-        # Set a cookie so the token persists for 7 days
-        token_to_cookie = None
-        token_param = request.query_params.get("token", "")
-        if token_param and token_param in _valid_tokens:
-            token_to_cookie = token_param
-        elif request.cookies.get("viz_token") in _valid_tokens:
-            token_to_cookie = request.cookies.get("viz_token")
-        if token_to_cookie:
-            resp = response
-            # Set cookie on the response if it's a Response object
-            # Note: middleware can't easily mutate all response types,
-            # so we set it via a header workaround for HTML responses
-            if hasattr(response, 'set_cookie'):
-                response.set_cookie(
-                    key="viz_token",
-                    value=token_to_cookie,
-                    max_age=86400 * 7,
-                    httponly=True,
-                    samesite="lax",
-                )
-        return response
+    if check_auth(request):
+        return await call_next(request)
 
-    # No valid token — show token entry page on /, error on other paths
+    # No credentials — show login page on /, error on other paths
     if request.url.path in ("/", "", "/index.html"):
         return HTMLResponse(
-            '<html><body style="display:flex;align-items:center;justify-content:center;height:100vh;'
-            'font-family:sans-serif;background:#08060f;color:#a78bfa">'
+            '<html><body style="display:flex;align-items:center;justify-content:center;'
+            'height:100vh;font-family:sans-serif;background:#08060f;color:#a78bfa">'
             '<div style="text-align:center;width:100%;max-width:400px">'
-            '<h1 style="font-size:2rem;margin-bottom:.5rem">🔑 Access Token</h1>'
-            '<p style="color:#7a72aa;margin-bottom:.4rem">Enter the token to access the visualizer</p>'
-            '<p style="color:#5a528a;font-size:.75rem;margin-bottom:1.5rem">'
-            'Share this URL with your friend: <span style="color:#a78bfa">?'
-            'token=YOUR_TOKEN</span></p>'
-            '<form method="GET" action="/" style="display:flex;flex-direction:column;gap:.6rem">'
-            '<input name="token" placeholder="Enter token..." required autofocus '
+            '<h1 style="font-size:2rem;margin-bottom:.5rem">🔒 Locked</h1>'
+            '<p style="color:#7a72aa;margin-bottom:1.5rem">Enter your credentials to access the visualizer</p>'
+            '<form method="POST" action="/api/login" style="display:flex;flex-direction:column;gap:.6rem">'
+            '<input name="username" placeholder="Username" required autofocus '
             'style="padding:.6rem;border-radius:8px;border:1px solid #2a2548;'
-            'background:#141126;color:#c9c2e6;font-size:.9rem;text-align:center;'
-            'letter-spacing:.1em;font-family:monospace">'
+            'background:#141126;color:#c9c2e6;font-size:.9rem">'
+            '<input name="password" type="password" placeholder="Password" required '
+            'style="padding:.6rem;border-radius:8px;border:1px solid #2a2548;'
+            'background:#141126;color:#c9c2e6;font-size:.9rem">'
             '<button type="submit" style="padding:.6rem;border-radius:8px;'
             'border:none;background:#7c5cfc;color:#fff;font-weight:600;'
-            'font-size:.9rem;cursor:pointer">Access</button>'
+            'font-size:.9rem;cursor:pointer">Login</button>'
             '</form>'
             '</div></body></html>',
             status_code=401,
         )
 
     return HTMLResponse(
+        '<html><body style="display:flex;align-items:center;justify-content:center;'
+        'height:100vh;font-family:sans-serif;background:#08060f;color:#f06d6d">'
+        '<div style="text-align:center">'
+        '<h1 style="font-size:1.5rem;margin-bottom:.5rem">✗ Unauthorized</h1>'
+        '<p style="color:#7a72aa;margin-bottom:1.5rem">You do not have access to this page.</p>'
+        '<a href="/" style="color:#a78bfa;text-decoration:none;'
+        'border:1px solid #2a2548;padding:.5rem 1rem;border-radius:8px;'
+        'display:inline-block">Go to login</a>'
+        '</div></body></html>',
+        status_code=401,
+    )
+
+
+# ─── Login endpoint ─────────────────────────────────────────────────────────
+
+@app.post("/api/login")
+async def login(request: Request):
+    """Accept username/password, set session cookie on success."""
+    form = await request.form()
+    user = form.get("username", "")
+    pwd = form.get("password", "")
+    if user == AUTH_USERNAME and pwd == AUTH_PASSWORD:
+        import secrets
+        session_id = secrets.token_hex(16)
+        _active_sessions.add(session_id)
+        response = HTMLResponse(
+            '<html><script>window.location.href = window.location.origin + window.location.pathname'
+            '</script><body><p>✓ Logged in. Redirecting...</p></body></html>'
+        )
+        response.set_cookie(
+            key="viz_sid",
+            value=session_id,
+            max_age=86400 * 30,  # 30 days
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+    return HTMLResponse(
+        '<html><body style="display:flex;align-items:center;justify-content:center;'
+        'height:100vh;font-family:sans-serif;background:#08060f;color:#f06d6d">'
+        '<div style="text-align:center">'
+        '<h1 style="font-size:1.5rem;margin-bottom:.5rem">✗ Wrong Credentials</h1>'
+        '<p style="color:#7a72aa;margin-bottom:1.5rem">Try again.</p>'
+        '<form method="GET" action="/">'
+        '<button type="submit" style="padding:.6rem 1.2rem;border-radius:8px;'
+        'border:1px solid #2a2548;background:#141126;color:#c9c2e6;'
+        'font-size:.9rem;cursor:pointer">Try Again</button>'
+        '</form>'
+        '</div></body></html>',
+        status_code=401,
+    )
+
+
+# ─── Logout endpoint ────────────────────────────────────────────────────────
+
+@app.get("/api/logout")
+async def logout(request: Request):
+    """Clear the session cookie."""
+    response = RedirectResponse(url="/")
+    response.delete_cookie("viz_sid")
+    return response
         '<html><body style="display:flex;align-items:center;justify-content:center;'
         'height:100vh;font-family:sans-serif;background:#08060f;color:#f06d6d">'
         '<div style="text-align:center">'
@@ -131,7 +175,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Audio Visualizer AI", version="1.0")
-app.middleware("http")(token_auth)
+app.middleware("http")(auth_middleware)
 
 # ─── Directories ────────────────────────────────────────────────────────────
 
@@ -253,11 +297,6 @@ async def get_ai_prompts(job_id: str):
     if prompts:
         return {"prompts": prompts, "count": len(prompts)}
     return {"prompts": [], "count": 0, "message": "No AI keyframes generated yet"}
-
-
-@app.get("/api/token")
-async def get_token():
-    return {"token": TOKEN}
 
 
 @app.get("/api/health")

@@ -21,7 +21,8 @@ COPY backend/ ./backend/
 EXPOSE 8000
 
 # Set environment variables
-ENV VIZ_TOKEN=stilleazy
+ENV AUTH_USERNAME=viz
+ENV AUTH_PASSWORD=ChangeMe123!
 ENV PYTHONUNBUFFERED=1
 
 # Start the server

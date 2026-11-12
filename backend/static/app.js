@@ -1,44 +1,9 @@
 /* ── Audio Visualizer AI — Frontend ────────────────────────────── */
 
-// ─── Token handling ───────────────────────────────────────────────
-// Read token from URL query param or cookie, and include in all API calls.
-(function() {
-  const params = new URLSearchParams(window.location.search);
-  const urlToken = params.get('token') || null;
-  const cookies = document.cookie.split(';');
-  let cookieToken = null;
-  for (const c of cookies) {
-    const [name, val] = c.trim().split('=');
-    if (name === 'viz_token') cookieToken = val;
-  }
-  window.AUTH_TOKEN = urlToken || cookieToken;
-
-  // If token came from URL, persist it in cookie and clean URL
-  if (urlToken) {
-    const d = new Date();
-    d.setTime(d.getTime() + 7 * 24 * 60 * 60 * 1000);
-    document.cookie = `viz_token=${urlToken};expires=${d.toUTCString()};path=/;samesite=lax`;
-    const url = new URL(window.location);
-    url.searchParams.delete('token');
-    window.history.replaceState({}, '', url);
-  }
-})();
-
+// Session-based auth: the session cookie (viz_sid) is sent automatically
+// by the browser. No token handling needed in JS.
 function apiFetch(path, options = {}) {
-  const url = '/api' + path;
-  const token = window.AUTH_TOKEN;
-  const headers = Object.assign({}, options.headers);
-  let finalUrl = url;
-
-  if (token) {
-    if (!options.method || options.method === 'GET') {
-      const sep = url.includes('?') ? '&' : '?';
-      finalUrl = url + sep + 'token=' + encodeURIComponent(token);
-    } else {
-      headers['X-Auth-Token'] = token;
-    }
-  }
-  return fetch(finalUrl, Object.assign({}, options, { headers }));
+  return fetch('/api' + path, options);
 }
   { id: 'cosmic-space',       name: 'Cosmic Space',   desc: 'Stars, nebulae, deep space glow' },
   { id: 'neon-cyberpunk',    name: 'Neon Cyberpunk', desc: 'Electric neon lines, dark city' },
